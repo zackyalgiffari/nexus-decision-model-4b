@@ -1,0 +1,13 @@
+# Smoke run on real distilled data: checks the full pipeline end to end.
+model: Qwen/Qwen3.5-4B
+train_file: artifacts/data/train.jsonl
+val_file: artifacts/data/val.jsonl
+out_dir: artifacts/adapters/smoke
+max_examples: 200
+epochs: 1
+grad_accum: 4
+warmup_steps: 5
+report_every: 5
+eval_every: 25
+save_every: 25
+val_max_examples: 50

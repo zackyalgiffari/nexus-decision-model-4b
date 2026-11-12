@@ -28,10 +28,10 @@ import time
 from pathlib import Path
 
 import mlx.core as mx
-import mlx.nn as nn
 import mlx.optimizers as optim
 import numpy as np
 import yaml
+from mlx import nn
 from mlx.utils import tree_flatten
 from mlx_lm import load
 from mlx_lm.tuner.trainer import grad_checkpoint
@@ -40,9 +40,9 @@ from mlx_lm.tuner.utils import linear_to_lora_layers
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from nexus_decision.prompt import close_think, generation_prefix  # noqa: E402
-from nexus_decision.runtime import letter_token_ids  # noqa: E402
-from nexus_decision.schema import LETTERS  # noqa: E402
+from nexus_decision.prompt import close_think, generation_prefix
+from nexus_decision.runtime import letter_token_ids
+from nexus_decision.schema import LETTERS
 
 DEFAULTS = {
     "model": "Qwen/Qwen3.5-4B",

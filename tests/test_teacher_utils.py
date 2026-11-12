@@ -1,5 +1,5 @@
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from data.teacher import is_peak, letter_distribution
 
@@ -19,6 +19,6 @@ def test_lowercase_a_is_not_letter_a():
 
 
 def test_peak_hours():
-    assert is_peak(datetime(2026, 11, 12, 7, 0, tzinfo=timezone.utc))      # Thursday 07 UTC
-    assert not is_peak(datetime(2026, 11, 12, 12, 0, tzinfo=timezone.utc))
-    assert not is_peak(datetime(2026, 11, 14, 7, 0, tzinfo=timezone.utc))  # Saturday
+    assert is_peak(datetime(2026, 11, 12, 7, 0, tzinfo=UTC))      # Thursday 07 UTC
+    assert not is_peak(datetime(2026, 11, 12, 12, 0, tzinfo=UTC))
+    assert not is_peak(datetime(2026, 11, 14, 7, 0, tzinfo=UTC))  # Saturday

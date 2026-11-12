@@ -64,7 +64,7 @@ class NexusDecision:
         self._letter_ids = letter_token_ids(backend.tokenizer)
 
     @classmethod
-    def from_pretrained(cls, path: str, backend: str = "mlx", **kwargs: Any) -> "NexusDecision":
+    def from_pretrained(cls, path: str, backend: str = "mlx", **kwargs: Any) -> NexusDecision:
         if backend == "mlx":
             from .runtime_mlx import MLXBackend
 

@@ -21,11 +21,12 @@ import random
 import sqlite3
 import threading
 import time
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE_DB = ROOT / "artifacts" / "cache" / "teacher.sqlite"
@@ -40,7 +41,7 @@ OFFPEAK_FACTOR = 0.5
 
 def is_peak(now: datetime | None = None) -> bool:
     """Peak: 01:00-04:00 and 06:00-10:00 UTC, Monday-Friday (holidays ignored -> conservative)."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     if now.weekday() >= 5:
         return False
     h = now.hour
@@ -77,7 +78,7 @@ class Teacher:
         if not key:
             raise RuntimeError("DEEPSEEK_API_KEY is not set (put it in .env)")
         self.model = model or os.environ.get("NEXUS_TEACHER_MODEL", "deepseek-flash")
-        self.budget = float(budget_usd or os.environ.get("NEXUS_BUDGET_USD", 18))
+        self.budget = float(budget_usd or os.environ.get("NEXUS_BUDGET_USD", "18"))
         self.offpeak_only = offpeak_only
         self.client = OpenAI(api_key=key, base_url="https://api.deepseek.com", timeout=600)
         db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -200,7 +201,7 @@ class Teacher:
             )
             self._db.execute(
                 "INSERT INTO ledger VALUES (?,?,?,?,?,?,?,?)",
-                (datetime.now(timezone.utc).isoformat(), step, self.model, int(peak),
+                (datetime.now(UTC).isoformat(), step, self.model, int(peak),
                  usage["hit"], usage["miss"], usage["out"], cost),
             )
             self._db.commit()

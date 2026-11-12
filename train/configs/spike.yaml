@@ -1,0 +1,12 @@
+# Feasibility spike: measures memory and throughput on a few dozen examples.
+model: Qwen/Qwen3.5-4B
+train_file: artifacts/spike/train.jsonl
+val_file: artifacts/spike/val.jsonl
+out_dir: artifacts/adapters/spike
+epochs: 1
+grad_accum: 4
+warmup_steps: 2
+report_every: 2
+eval_every: 1000
+save_every: 1000
+val_max_examples: 20

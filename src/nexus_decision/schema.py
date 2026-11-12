@@ -8,7 +8,7 @@ exactly one of the declared options and returns a probability distribution over 
 from __future__ import annotations
 
 import string
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -77,13 +77,13 @@ class Binary(_QuestionBase):
         ]
 
 
-Question = Annotated[Union[Choice, Score, Binary], Field(discriminator="type")]
+Question = Annotated[Choice | Score | Binary, Field(discriminator="type")]
 
 
 class DecisionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    state: Union[dict[str, Any], list[Any], str]
+    state: dict[str, Any] | list[Any] | str
     questions: dict[str, Question]
 
     @field_validator("questions")

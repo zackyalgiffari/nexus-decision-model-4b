@@ -7,7 +7,7 @@ list form; metrics only use the top probability and the probability of the true 
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 import numpy as np
 
@@ -99,7 +99,7 @@ def flip_rate(pred_a: Sequence[str], pred_b: Sequence[str]) -> float:
 
 def summary(probs, labels, n_bins: int = 15) -> dict[str, float]:
     return {
-        "n": int(len(labels)),
+        "n": len(labels),
         "accuracy": accuracy(probs, labels),
         "macro_f1": macro_f1(probs, labels),
         "ece": ece(probs, labels, n_bins),

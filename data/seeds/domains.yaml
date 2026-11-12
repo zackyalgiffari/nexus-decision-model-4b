@@ -1,0 +1,57 @@
+# Synthetic scenario domains for nexus-decision-4b.
+# weight = relative share of generated scenarios.
+domains:
+  - id: support_routing
+    weight: 1.2
+    description: Route inbound customer-support messages (email, chat, app reviews) to the right queue or automated flow.
+    question_ideas: [which queue handles this, is the customer at risk of churning, urgency score, does it need a human]
+  - id: agent_tool_routing
+    weight: 1.4
+    description: An AI agent's state (user request, conversation so far, available tools, last tool result) - decide the next action or tool.
+    question_ideas: [which tool to call next, is the task complete, does the request need fresh web data, should the agent ask a clarifying question]
+  - id: moderation_triage
+    weight: 1.0
+    description: User-generated content (comments, listings, profile bios) - policy triage.
+    question_ideas: [which policy category applies, severity score, should it be auto-removed, needs human review]
+  - id: fraud_risk
+    weight: 1.0
+    description: Payment, signup or account-change events with risk signals (device, velocity, geography, history).
+    question_ideas: [approve / step-up auth / block / review, risk score, is this account takeover]
+  - id: ticket_priority
+    weight: 1.0
+    description: IT / engineering incident and helpdesk tickets with logs, affected users and SLAs.
+    question_ideas: [priority level, owning team, is it a duplicate of an open incident, is it a security incident]
+  - id: code_review_gating
+    weight: 0.9
+    description: Pull-request metadata, diff summaries, CI results and review comments.
+    question_ideas: [merge / request changes / needs security review, risk score, are tests sufficient, breaking change]
+  - id: lead_scoring
+    weight: 0.8
+    description: B2B sales leads and inbound demo requests with firmographics and activity.
+    question_ideas: [lead quality score, which sales motion, is it a competitor or student, buying stage]
+  - id: policy_compliance
+    weight: 1.0
+    description: Expense reports, travel requests, refunds, contract clauses or HR requests checked against a stated policy included in the state.
+    question_ideas: [does it comply with the policy, which clause is violated, approval level required]
+  - id: document_type
+    weight: 0.8
+    description: Extracted text or metadata from documents (invoices, contracts, CVs, medical forms, receipts, IDs).
+    question_ideas: [document type, language, is it complete, contains personal data]
+  - id: escalation
+    weight: 0.8
+    description: Ongoing conversations or workflows (customer, patient-intake, legal intake, onboarding) where something may need escalation.
+    question_ideas: [escalate now, to whom, sentiment score, legal threat present]
+  - id: data_quality
+    weight: 0.7
+    description: Records from databases, forms or ETL pipelines (customer records, product catalog rows, sensor readings).
+    question_ideas: [is the record valid, which field is wrong, duplicate of an existing record, anomaly severity]
+  - id: needs_human
+    weight: 0.8
+    description: Requests to an automated system where the right move may be to refuse, defer or hand off (out-of-scope, unsafe, ambiguous, missing info).
+    question_ideas: [can automation handle it, what is missing, is the request out of scope, should it be refused]
+
+# Variation knobs sampled per generation call.
+variation:
+  difficulty: {easy: 0.25, medium: 0.4, hard: 0.25, ambiguous: 0.1}
+  state_format: {json_object: 0.55, free_text: 0.2, json_with_long_text_field: 0.15, log_lines: 0.1}
+  language: {English: 0.85, Indonesian: 0.05, Spanish: 0.03, German: 0.02, French: 0.02, Portuguese: 0.02, Japanese: 0.01}
