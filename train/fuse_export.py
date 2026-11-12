@@ -97,9 +97,9 @@ def main() -> None:
 
     for name in COPY:
         if (base / name).exists():
-            shutil.copy(base / name, out / name)
+            shutil.copyfile(base / name, out / name)
     if args.config:
-        shutil.copy(args.config, out / "nexus_config.json")
+        shutil.copyfile(args.config, out / "nexus_config.json")
     print(f"merged {merged} weights -> {out}")
 
 

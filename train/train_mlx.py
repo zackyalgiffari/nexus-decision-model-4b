@@ -39,10 +39,12 @@ from mlx_lm.tuner.utils import linear_to_lora_layers
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
 from nexus_decision.prompt import close_think, generation_prefix
 from nexus_decision.runtime import letter_token_ids
 from nexus_decision.schema import LETTERS
+from train import mlx_patches
 
 DEFAULTS = {
     "model": "Qwen/Qwen3.5-4B",
@@ -57,7 +59,9 @@ DEFAULTS = {
     "lr": 1.0e-4,
     "warmup_steps": 50,
     "epochs": 2,
-    "grad_accum": 8,
+    "batch_size": 4,
+    "think_batch_size": 1,
+    "grad_accum": 2,
     "max_seq_len": 2048,
     "kl_weight": 1.0,
     "lm_weight": 0.5,
@@ -112,6 +116,55 @@ def load_records(path: str, limit: int | None) -> list[dict]:
     return recs[:limit] if limit else recs
 
 
+# --------------------------------------------------------------------------- batching
+def make_batches(train: list[dict], batch_size: int, think_batch_size: int, rng: random.Random):
+    """Homogeneous batches (fast-only or think-only), grouped by length to limit padding."""
+    batches = []
+    for kind, bs in (("fast", batch_size), ("think", think_batch_size)):
+        idx = [i for i, ex in enumerate(train) if (ex["lm_start"] is None) == (kind == "fast")]
+        rng.shuffle(idx)
+        mega = bs * 32
+        for s in range(0, len(idx), mega):
+            chunk = sorted(idx[s : s + mega], key=lambda i: len(train[i]["tokens"]))
+            batches += [chunk[j : j + bs] for j in range(0, len(chunk), bs)]
+    rng.shuffle(batches)
+    return batches
+
+
+def collate(exs: list[dict]) -> dict:
+    """Right-pad a batch. Causal attention means padding never affects earlier positions, so no
+    mask is needed (and the chunked Gated DeltaNet path requires mask=None)."""
+    B = len(exs)
+    L = max(len(e["tokens"]) for e in exs)
+    tokens = np.zeros((B, L), dtype=np.int32)
+    letters = np.zeros((B, len(LETTERS)), dtype=np.int32)
+    valid = np.zeros((B, len(LETTERS)), dtype=bool)
+    target = np.zeros((B, len(LETTERS)), dtype=np.float32)
+    ans_pos = np.zeros(B, dtype=np.int32)
+    rows, pos, tgt = [], [], []
+    for b, e in enumerate(exs):
+        n = len(e["letters"])
+        tokens[b, : len(e["tokens"])] = e["tokens"]
+        letters[b, :n] = e["letters"]
+        valid[b, :n] = True
+        target[b, :n] = e["target"]
+        ans_pos[b] = e["ans_pos"]
+        if e["lm_start"] is not None:
+            p = np.arange(e["lm_start"] - 1, len(e["tokens"]) - 1)
+            rows += [b] * len(p)
+            pos += p.tolist()
+            tgt += e["tokens"][p + 1].tolist()
+    out = {
+        "tokens": mx.array(tokens), "letters": mx.array(letters), "valid": mx.array(valid),
+        "target": mx.array(target), "ans_pos": mx.array(ans_pos), "n_tokens": int(sum(len(e["tokens"]) for e in exs)),
+        "lm": None,
+    }
+    if rows:
+        out["lm"] = (mx.array(np.array(rows, np.int32)), mx.array(np.array(pos, np.int32)),
+                     mx.array(np.array(tgt, np.int32)))
+    return out
+
+
 # --------------------------------------------------------------------------- model helpers
 def hidden_and_head(model):
     """Return (backbone, head_fn) so we can project only selected positions."""
@@ -124,37 +177,49 @@ def hidden_and_head(model):
     return backbone, head
 
 
+def letter_logp(backbone, head, tokens, ans_pos, letters, valid):
+    h = backbone(tokens)  # (B, L, H)
+    B = tokens.shape[0]
+    h_ans = h[mx.arange(B), ans_pos]  # (B, H)
+    z = mx.take_along_axis(head(h_ans), letters, axis=-1).astype(mx.float32)  # (B, 26)
+    z = mx.where(valid, z, -1e9)
+    return h, z - mx.logsumexp(z, axis=-1, keepdims=True)
+
+
 def make_loss(model, kl_w: float, lm_w: float):
     backbone, head = hidden_and_head(model)
 
-    def loss_fn(model, tokens, ans_pos, letters, target, lm_start):
-        h = backbone(tokens[None])[0]  # (L, H)
-        z = head(h[ans_pos])[letters].astype(mx.float32)  # (n,)
-        logp = z - mx.logsumexp(z)
+    def loss_fn(model, tokens, ans_pos, letters, valid, target, lm):
+        h, logp = letter_logp(backbone, head, tokens, ans_pos, letters, valid)
         t = target
-        kl = mx.sum(mx.where(t > 0, t * (mx.log(mx.maximum(t, 1e-12)) - logp), 0.0))
+        kl_rows = mx.sum(mx.where(t > 0, t * (mx.log(mx.maximum(t, 1e-12)) - logp), 0.0), axis=-1)
+        kl = kl_rows.mean()
         loss = kl_w * kl
         ce = mx.array(0.0)
-        if lm_start is not None:
-            hs = h[lm_start - 1 : -1]
-            logits = head(hs).astype(mx.float32)
-            ce = nn.losses.cross_entropy(logits, tokens[lm_start:]).mean()
+        if lm is not None:
+            rows, pos, tgt = lm
+            logits = head(h[rows, pos]).astype(mx.float32)
+            ce = nn.losses.cross_entropy(logits, tgt).mean()
             loss = loss + lm_w * ce
         return loss, (kl, ce)
 
     return loss_fn
 
 
-def evaluate(model, encoded: list[dict], letters_only=True) -> dict:
+def evaluate(model, encoded: list[dict], batch_size: int = 8) -> dict:
+    model.eval()
     backbone, head = hidden_and_head(model)
     nll, correct = 0.0, 0
-    for ex in encoded:
-        h = backbone(mx.array(ex["tokens"])[None])[0]
-        z = head(h[ex["ans_pos"]])[mx.array(ex["letters"])].astype(mx.float32)
-        logp = np.array(z - mx.logsumexp(z))
-        t = ex["target"]
-        nll += float(-(t * logp).sum())
-        correct += int(np.argmax(logp) == np.argmax(t))
+    for s in range(0, len(encoded), batch_size):
+        exs = encoded[s : s + batch_size]
+        b = collate(exs)
+        _, logp = letter_logp(backbone, head, b["tokens"], b["ans_pos"], b["letters"], b["valid"])
+        logp = np.array(logp)
+        for i, ex in enumerate(exs):
+            n = len(ex["letters"])
+            nll += float(-(ex["target"] * logp[i, :n]).sum())
+            correct += int(np.argmax(logp[i, :n]) == np.argmax(ex["target"]))
+    model.train()
     n = max(1, len(encoded))
     return {"val_soft_ce": nll / n, "val_agree": correct / n}
 
@@ -181,15 +246,20 @@ def main() -> None:
     ap.add_argument("--resume", default=None, help="adapters.safetensors to resume from")
     ap.add_argument("--resume-step", type=int, default=0)
     ap.add_argument("--max-steps", type=int, default=None, help="stop early (spike/bench)")
+    ap.add_argument("--set", nargs="*", default=[], help="config overrides key=value (YAML values)")
     args = ap.parse_args()
 
     cfg = dict(DEFAULTS)
     cfg.update(yaml.safe_load(Path(args.config).read_text()) or {})
+    for kv in args.set:
+        k, v = kv.split("=", 1)
+        cfg[k] = yaml.safe_load(v)
     random.seed(cfg["seed"])
     np.random.seed(cfg["seed"])
     mx.random.seed(cfg["seed"])
     out_dir = ROOT / cfg["out_dir"]
 
+    mlx_patches.apply()
     print(f"loading {cfg['model']}", flush=True)
     model, tok = load(cfg["model"])
     model.freeze()
@@ -199,6 +269,7 @@ def main() -> None:
     )
     if args.resume:
         model.load_weights(args.resume, strict=False)
+    model.train()  # Gated DeltaNet: use the differentiable ops path, not the Metal kernel
     if cfg["grad_checkpoint"]:
         grad_checkpoint(model.layers[0])
     n_train = sum(v.size for _, v in tree_flatten(model.trainable_parameters()))
@@ -211,11 +282,16 @@ def main() -> None:
         val = [e for e in map(enc.encode, load_records(ROOT / cfg["val_file"], cfg["val_max_examples"])) if e]
     print(f"train examples: {len(train)}  val examples: {len(val)}", flush=True)
 
-    total_steps = math.ceil(len(train) * cfg["epochs"] / cfg["grad_accum"])
+    rng = random.Random(cfg["seed"])
+    epoch_batches = [make_batches(train, cfg["batch_size"], cfg["think_batch_size"], rng)
+                     for _ in range(cfg["epochs"])]
+    all_batches = [bt for ep in epoch_batches for bt in ep]
+    total_steps = math.ceil(len(all_batches) / cfg["grad_accum"])
+    warm = max(1, min(cfg["warmup_steps"], total_steps - 1))
     sched = optim.join_schedules(
-        [optim.linear_schedule(1e-7, cfg["lr"], max(1, cfg["warmup_steps"])),
-         optim.cosine_decay(cfg["lr"], max(1, total_steps - cfg["warmup_steps"]), cfg["lr"] * 0.1)],
-        [max(1, cfg["warmup_steps"])],
+        [optim.linear_schedule(1e-7, cfg["lr"], warm),
+         optim.cosine_decay(cfg["lr"], max(1, total_steps - warm), cfg["lr"] * 0.1)],
+        [warm],
     )
     opt = optim.AdamW(learning_rate=sched, weight_decay=0.0)
     loss_and_grad = nn.value_and_grad(model, make_loss(model, cfg["kl_weight"], cfg["lm_weight"]))
@@ -229,24 +305,21 @@ def main() -> None:
     acc_grads = None
     t0, toks_seen = time.time(), 0
     run_loss, run_kl, run_ce, run_n = 0.0, 0.0, 0.0, 0
-    order = []
-    for _ in range(cfg["epochs"]):
-        idx = list(range(len(train)))
-        random.shuffle(idx)
-        order += idx
-    order = order[args.resume_step * cfg["grad_accum"]:]
+    print(f"batches: {len(all_batches)}  optimizer steps: {total_steps}", flush=True)
 
-    for i in order:
-        ex = train[i]
+    for bidx in all_batches[args.resume_step * cfg["grad_accum"]:]:
+        bt = collate([train[i] for i in bidx])
         (loss, (kl, ce)), grads = loss_and_grad(
-            model, mx.array(ex["tokens"]), ex["ans_pos"], mx.array(ex["letters"]),
-            mx.array(ex["target"]), ex["lm_start"],
+            model, bt["tokens"], bt["ans_pos"], bt["letters"], bt["valid"], bt["target"], bt["lm"],
         )
         acc_grads = grads if acc_grads is None else nn.utils.tree_map(mx.add, acc_grads, grads)
         mx.eval(acc_grads, loss)
         micro += 1
-        toks_seen += len(ex["tokens"])
-        run_loss += loss.item(); run_kl += kl.item(); run_ce += ce.item(); run_n += 1
+        toks_seen += bt["n_tokens"]
+        run_loss += loss.item()
+        run_kl += kl.item()
+        run_ce += ce.item()
+        run_n += 1
         if micro % cfg["grad_accum"]:
             continue
         acc_grads = nn.utils.tree_map(lambda g: g / cfg["grad_accum"], acc_grads)
