@@ -28,7 +28,7 @@ packages = ["src/nexus_decision"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "src"]
 
 [tool.ruff]
 line-length = 100

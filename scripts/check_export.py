@@ -5,6 +5,8 @@ import sys
 
 import numpy as np
 
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parents[1] / 'src'))
+
 from nexus_decision.runtime import NexusDecision
 from nexus_decision.schema import Choice
 
