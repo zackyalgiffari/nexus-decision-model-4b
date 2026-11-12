@@ -78,6 +78,20 @@ is kept only if both of these hold:
 All questions of a scenario stay in one split. The reference label for synthetic test items is the
 teacher's argmax, so it is model-generated. Results on public data use human gold labels.
 
+## Measured teacher cost (pilot, off-peak)
+
+| Step | Cost per unit |
+|---|---|
+| Scenario generation | ~$0.0034 per call (~13 questions) |
+| Fast labels, 3 orders | ~$0.00013 per synthetic question, ~$0.00028 per public question |
+| Think traces, effort `high` | ~$0.00026 per trace (traces average ~500 characters) |
+
+The full pipeline (`scripts/run_data_pipeline.sh`: 1,100 generation calls, all questions
+fast-labelled, 5,000 think traces) is expected to cost about $6-7 off-peak.
+
+On the 60-question public pilot, teacher accuracy against human gold labels was 0.90. Its argmax
+stayed the same across option orders for 87% of synthetic and 93% of public questions.
+
 ## Budget control
 
 | Setting | Effect |

@@ -57,6 +57,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--orders", type=int, default=3)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--source", default="all", choices=["all", "synthetic", "public"])
     ap.add_argument("--workers", type=int, default=48)
     ap.add_argument("--budget-usd", type=float, default=None)
     ap.add_argument("--offpeak-only", action="store_true")
@@ -67,7 +68,8 @@ def main() -> None:
         for line in OUT.read_text().splitlines():
             r = json.loads(line)
             done.add((r["sid"], r["question"]))
-    items = [it for it in question_items(load_scenarios()) if (it[0]["id"], it[1]) not in done]
+    items = [it for it in question_items(load_scenarios()) if (it[0]["id"], it[1]) not in done
+             and args.source in ("all", "public" if it[0]["source"] != "synthetic" else "synthetic")]
     if args.limit:
         items = items[: args.limit]
     print(f"{len(items)} questions to label ({len(done)} already done)")

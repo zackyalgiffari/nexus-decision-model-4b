@@ -59,6 +59,7 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--effort", default="low", choices=["low", "high", "max"])
     ap.add_argument("--max-tokens", type=int, default=3000)
+    ap.add_argument("--source", default="all", choices=["all", "synthetic", "public"])
     ap.add_argument("--workers", type=int, default=32)
     ap.add_argument("--budget-usd", type=float, default=None)
     ap.add_argument("--offpeak-only", action="store_true")
@@ -68,7 +69,8 @@ def main() -> None:
     done = set()
     if OUT.exists():
         done = {(json.loads(x)["sid"], json.loads(x)["question"]) for x in OUT.read_text().splitlines()}
-    pool = [it for it in question_items(load_scenarios()) if (it[0]["id"], it[1]) not in done]
+    pool = [it for it in question_items(load_scenarios()) if (it[0]["id"], it[1]) not in done
+            and args.source in ("all", "public" if it[0]["source"] != "synthetic" else "synthetic")]
     items = stratified(pool, args.n, args.seed)
     print(f"{len(items)} questions for think traces ({len(done)} already done)")
 

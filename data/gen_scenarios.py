@@ -115,12 +115,16 @@ def main() -> None:
         )
         r = teacher.chat(
             [{"role": "system", "content": SYSTEM % MAX_OPTIONS}, {"role": "user", "content": msg}],
-            step="gen_scenarios", thinking=False, max_tokens=6000, temperature=1.1, json_mode=True,
+            step="gen_scenarios", thinking=False, max_tokens=6000, temperature=1.0, json_mode=True,
             seed_tag=f"{args.seed}-{job['i']}",
         )
         try:
             data = json.loads(r.content)
         except json.JSONDecodeError:
+            from json_repair import repair_json
+
+            data = repair_json(r.content, return_objects=True)
+        if not isinstance(data, dict):
             return []
         out = []
         for k, scn in enumerate(data.get("scenarios", [])):
