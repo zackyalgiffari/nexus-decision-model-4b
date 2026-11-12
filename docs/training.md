@@ -1,7 +1,26 @@
 # Training
 
-The student is `Qwen/Qwen3.5-4B` (Apache-2.0), fine-tuned with LoRA in MLX on Apple silicon
-(`train/train_mlx.py`).
+The student is `Qwen/Qwen3.5-4B` (Apache-2.0), fine-tuned with LoRA. There are two trainers with
+the same objective and the same tokenisation (`src/nexus_decision/encode.py`):
+
+| Trainer | Hardware | Notes |
+|---|---|---|
+| `train/train_torch.py` (PyTorch + PEFT) | CUDA GPU, e.g. a Colab A100 or L4 | Used for the released model. Needs `flash-linear-attention` for fast Gated DeltaNet kernels. See `notebooks/train_colab.ipynb`. |
+| `train/train_mlx.py` (MLX) | Apple silicon | Good for small runs and experiments. |
+
+### Why the released run used a GPU
+
+Qwen3.5 is a hybrid model. Three of every four decoder blocks use Gated DeltaNet linear
+attention.
+
+- **The problem on Apple silicon.** mlx-lm 0.32's fast Metal kernel for that recurrence has no
+  backward pass, so training falls back to a per-token loop. On an M4 (24 GB) this gave about
+  12 tok/s.
+- **The partial fix.** `train/mlx_patches.py` vendors the chunk-parallel form from the open
+  upstream PR ml-explore/mlx-lm#2021. That raises it to about 45 tok/s with LoRA on 24 layers,
+  or about 70 tok/s on 12 layers. That is still too slow for a dataset of about 13M tokens.
+- **The GPU path.** On CUDA, `flash-linear-attention` provides fused kernels, so the same run
+  takes a few hours.
 
 ## Objective
 
@@ -15,20 +34,29 @@ loss = kl_weight * KL(target || softmax(letter logits at the answer position))
 Only the answer position (and, for think records, the completion) is projected through the LM
 head. The 248k-token vocabulary never gets materialised for the prompt tokens.
 
-## Default hyper-parameters (`train/configs/full.yaml`)
+## Default hyper-parameters (`train/configs/colab_a100.yaml`)
 
 | | |
 |---|---|
-| LoRA layers | Last 24 of 32 decoder blocks, all linear projections (attention, Gated DeltaNet, MLP) |
-| Rank / scale | 16 / 2.0 (equivalent to alpha = 32) |
-| Optimiser | AdamW, lr 1e-4, 50 warm-up steps, cosine decay to 1e-5 |
-| Batch | 1 sequence × 8 gradient-accumulation steps |
+| LoRA layers | All 32 decoder blocks, all linear projections (attention, Gated DeltaNet, MLP) |
+| Rank / alpha | 16 / 32 |
+| Optimiser | AdamW, lr 1e-4, 50 warm-up steps, cosine decay, grad-norm clip 1.0 |
+| Batch | 8 fast records (or 2 think records) × 2 accumulation steps, length-grouped |
 | Epochs | 2 |
 | Max length | 2,048 tokens |
 | Loss weights | KL 1.0, LM 0.5 |
 | Memory | Gradient checkpointing on the decoder blocks |
 
 ## Running
+
+On Colab, follow `notebooks/train_colab.ipynb`. It needs `scripts/pack_colab.sh` to build the
+upload. On any CUDA machine:
+
+```bash
+python train/train_torch.py --config train/configs/colab_a100.yaml            # add --resume to continue
+```
+
+On Apple silicon:
 
 ```bash
 caffeinate -i uv run python train/train_mlx.py --config train/configs/full.yaml
@@ -49,8 +77,11 @@ uv run python train/train_mlx.py --config train/configs/full.yaml \
 
 ## Export
 
+`fuse_export.py` accepts both adapter formats: PEFT (`adapter_model.safetensors`) and MLX
+(`adapters.safetensors`).
+
 ```bash
-uv run python train/fuse_export.py --adapters artifacts/adapters/full \
+uv run python train/fuse_export.py --adapters artifacts/adapters/colab/final \
     --out artifacts/fused/nexus-decision-4b --config artifacts/eval/nexus_config.json
 ```
 

@@ -41,9 +41,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
 
-from nexus_decision.prompt import close_think, generation_prefix
-from nexus_decision.runtime import letter_token_ids
-from nexus_decision.schema import LETTERS
+from nexus_decision.encode import Encoder, collate_numpy, load_records, make_batches
 from train import mlx_patches
 
 DEFAULTS = {
@@ -75,93 +73,14 @@ DEFAULTS = {
 
 
 # --------------------------------------------------------------------------- data
-class Encoder:
-    def __init__(self, tokenizer, max_seq_len: int):
-        self.tok = tokenizer
-        self.max_seq_len = max_seq_len
-        self.letter_ids = letter_token_ids(tokenizer)
-        self.eot = tokenizer.encode("<|im_end|>", add_special_tokens=False)
-
-    def encode(self, rec: dict) -> dict | None:
-        n = len(rec["labels"])
-        target = np.asarray(rec["target"], dtype=np.float32)
-        target = target / target.sum()
-        if rec["kind"] == "fast" or not rec.get("reasoning"):
-            prefix = generation_prefix(self.tok, rec["user_text"], "fast")
-            toks = self.tok.encode(prefix, add_special_tokens=False)
-            ans_pos = len(toks) - 1  # logits at the last prompt token predict the letter
-            lm_start = None
-        else:
-            prefix = generation_prefix(self.tok, rec["user_text"], "think")
-            p_toks = self.tok.encode(prefix, add_special_tokens=False)
-            body = close_think(rec["reasoning"])
-            b_toks = self.tok.encode(body, add_special_tokens=False)
-            letter = LETTERS[int(np.argmax(target))]
-            toks = p_toks + b_toks + [self.letter_ids[LETTERS.index(letter)]] + self.eot
-            ans_pos = len(p_toks) + len(b_toks) - 1
-            lm_start = len(p_toks)
-        if len(toks) > self.max_seq_len:
-            return None
-        return {
-            "tokens": np.asarray(toks, dtype=np.int32),
-            "ans_pos": ans_pos,
-            "letters": np.asarray(self.letter_ids[:n], dtype=np.int32),
-            "target": target,
-            "lm_start": lm_start,
-        }
-
-
-def load_records(path: str, limit: int | None) -> list[dict]:
-    recs = [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
-    return recs[:limit] if limit else recs
-
-
-# --------------------------------------------------------------------------- batching
-def make_batches(train: list[dict], batch_size: int, think_batch_size: int, rng: random.Random):
-    """Homogeneous batches (fast-only or think-only), grouped by length to limit padding."""
-    batches = []
-    for kind, bs in (("fast", batch_size), ("think", think_batch_size)):
-        idx = [i for i, ex in enumerate(train) if (ex["lm_start"] is None) == (kind == "fast")]
-        rng.shuffle(idx)
-        mega = bs * 32
-        for s in range(0, len(idx), mega):
-            chunk = sorted(idx[s : s + mega], key=lambda i: len(train[i]["tokens"]))
-            batches += [chunk[j : j + bs] for j in range(0, len(chunk), bs)]
-    rng.shuffle(batches)
-    return batches
-
-
 def collate(exs: list[dict]) -> dict:
     """Right-pad a batch. Causal attention means padding never affects earlier positions, so no
     mask is needed (and the chunked Gated DeltaNet path requires mask=None)."""
-    B = len(exs)
-    L = max(len(e["tokens"]) for e in exs)
-    tokens = np.zeros((B, L), dtype=np.int32)
-    letters = np.zeros((B, len(LETTERS)), dtype=np.int32)
-    valid = np.zeros((B, len(LETTERS)), dtype=bool)
-    target = np.zeros((B, len(LETTERS)), dtype=np.float32)
-    ans_pos = np.zeros(B, dtype=np.int32)
-    rows, pos, tgt = [], [], []
-    for b, e in enumerate(exs):
-        n = len(e["letters"])
-        tokens[b, : len(e["tokens"])] = e["tokens"]
-        letters[b, :n] = e["letters"]
-        valid[b, :n] = True
-        target[b, :n] = e["target"]
-        ans_pos[b] = e["ans_pos"]
-        if e["lm_start"] is not None:
-            p = np.arange(e["lm_start"] - 1, len(e["tokens"]) - 1)
-            rows += [b] * len(p)
-            pos += p.tolist()
-            tgt += e["tokens"][p + 1].tolist()
-    out = {
-        "tokens": mx.array(tokens), "letters": mx.array(letters), "valid": mx.array(valid),
-        "target": mx.array(target), "ans_pos": mx.array(ans_pos), "n_tokens": int(sum(len(e["tokens"]) for e in exs)),
-        "lm": None,
-    }
-    if rows:
-        out["lm"] = (mx.array(np.array(rows, np.int32)), mx.array(np.array(pos, np.int32)),
-                     mx.array(np.array(tgt, np.int32)))
+    c = collate_numpy(exs)
+    out = {k: mx.array(c[k].astype(np.int32) if c[k].dtype == np.int64 else c[k])
+           for k in ("tokens", "letters", "valid", "target", "ans_pos")}
+    out["n_tokens"] = c["n_tokens"]
+    out["lm"] = None if c["lm"] is None else tuple(mx.array(x.astype(np.int32)) for x in c["lm"])
     return out
 
 

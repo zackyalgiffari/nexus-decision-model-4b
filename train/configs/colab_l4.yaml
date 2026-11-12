@@ -1,0 +1,21 @@
+# Same run sized for a Colab L4 (24 GB): smaller batches, more accumulation.
+model: Qwen/Qwen3.5-4B
+train_file: artifacts/data/train.jsonl
+val_file: artifacts/data/val.jsonl
+out_dir: artifacts/adapters/colab
+num_layers: 32
+rank: 16
+alpha: 32
+lr: 1.0e-4
+warmup_steps: 50
+epochs: 2
+batch_size: 4
+think_batch_size: 1
+grad_accum: 4
+max_seq_len: 2048
+kl_weight: 1.0
+lm_weight: 0.5
+grad_checkpoint: true
+save_every: 200
+eval_every: 200
+val_max_examples: 300

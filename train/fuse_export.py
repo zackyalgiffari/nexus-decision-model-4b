@@ -44,12 +44,40 @@ def mlx_to_hf(key: str) -> str:
     return "model.language_model." + key[len(prefix):]
 
 
+def peft_to_hf(module: str) -> str:
+    """base_model.model.model.layers.N.<path>  ->  model.language_model.layers.N.<path>"""
+    prefix = "base_model.model.model."
+    if not module.startswith(prefix):
+        raise KeyError(f"unexpected PEFT key {module}")
+    return "model.language_model." + module[len(prefix):]
+
+
+def load_peft_deltas(adapter_dir: Path, cfg: dict) -> dict[str, torch.Tensor]:
+    if cfg.get("use_dora") or cfg.get("use_rslora"):
+        raise ValueError("only plain LoRA adapters are supported")
+    scale = float(cfg["lora_alpha"]) / float(cfg["r"])
+    pairs: dict[str, dict[str, torch.Tensor]] = defaultdict(dict)
+    with safe_open(str(adapter_dir / "adapter_model.safetensors"), framework="pt") as f:
+        for k in f.keys():  # noqa: SIM118 (safe_open has no __iter__)
+            module, leaf = k.rsplit(".", 2)[0], k.rsplit(".", 2)[1]  # ...lora_A.weight
+            pairs[module][leaf] = f.get_tensor(k).float()
+    deltas = {}
+    for module, ab in pairs.items():
+        if set(ab) != {"lora_A", "lora_B"}:
+            raise ValueError(f"{module}: expected lora_A/lora_B, got {sorted(ab)}")
+        deltas[peft_to_hf(module) + ".weight"] = scale * ab["lora_B"] @ ab["lora_A"]
+    return deltas
+
+
 def load_deltas(adapter_dir: Path) -> dict[str, torch.Tensor]:
+    """Load LoRA deltas from an MLX (train_mlx.py) or PEFT (train_torch.py) adapter directory."""
     cfg = json.loads((adapter_dir / "adapter_config.json").read_text())
+    if (adapter_dir / "adapter_model.safetensors").exists():
+        return load_peft_deltas(adapter_dir, cfg)
     scale = float(cfg["lora_parameters"]["scale"])
     pairs: dict[str, dict[str, torch.Tensor]] = defaultdict(dict)
     with safe_open(str(adapter_dir / "adapters.safetensors"), framework="pt") as f:
-        for k in f.keys():
+        for k in f.keys():  # noqa: SIM118
             module, leaf = k.rsplit(".", 1)
             pairs[module][leaf] = f.get_tensor(k).float()
     deltas = {}

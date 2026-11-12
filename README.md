@@ -56,7 +56,8 @@ and response schema, the raw prompt format for other runtimes, and the limitatio
 |---|---|
 | `src/nexus_decision/` | Runtime: schema, prompt rendering, MLX and Transformers backends, calibration, metrics |
 | `data/` | Teacher pipeline: public conversion, synthetic scenarios, soft labels, think traces, splits |
-| `train/` | MLX LoRA distillation (`train_mlx.py`) and export to a full Hugging Face checkpoint (`fuse_export.py`) |
+| `train/` | LoRA distillation: PyTorch/PEFT for CUDA (`train_torch.py`) and MLX (`train_mlx.py`). Export to a full Hugging Face checkpoint (`fuse_export.py`). |
+| `notebooks/` | Google Colab notebook for the GPU training run |
 | `eval/` | Evaluation runs, temperature fitting and the metrics report |
 | `docs/` | [protocol](docs/protocol.md), [data](docs/data.md), [training](docs/training.md), [evaluation](docs/evaluation.md) |
 
@@ -73,17 +74,16 @@ uv run python -m data.label_fast --orders 3 --offpeak-only
 uv run python -m data.label_think --n 4000 --offpeak-only
 uv run python -m data.build_splits
 
-# 2. training (Apple silicon, ~1 day on an M4)
-caffeinate -i uv run python train/train_mlx.py --config train/configs/full.yaml
+# 2. training on a CUDA GPU (Colab A100: notebooks/train_colab.ipynb)
+scripts/pack_colab.sh                                   # upload the zip to Google Drive
+#    ...run the notebook, then download adapters/run1/final -> artifacts/adapters/colab/final
 
-# 3. calibration and evaluation
-uv run python -m eval.run_eval --name tuned --adapters artifacts/adapters/full --split calib
-uv run python -m eval.run_eval --name tuned --adapters artifacts/adapters/full --split test
-uv run python -m eval.report --name tuned
-
-# 4. export
-uv run python train/fuse_export.py --adapters artifacts/adapters/full \
-    --out artifacts/fused/nexus-decision-4b --config artifacts/eval/nexus_config.json
+# 3. export, calibration and evaluation
+uv run python train/fuse_export.py --adapters artifacts/adapters/colab/final \
+    --out artifacts/fused/nexus-decision-4b
+uv run python -m eval.run_eval --name tuned --model artifacts/fused/nexus-decision-4b --split calib
+uv run python -m eval.run_eval --name tuned --model artifacts/fused/nexus-decision-4b --split test
+uv run python -m eval.report --name tuned              # writes artifacts/eval/nexus_config.json
 ```
 
 Tests: `uv run pytest`.
