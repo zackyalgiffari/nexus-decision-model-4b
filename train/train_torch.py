@@ -94,6 +94,23 @@ def letter_logp(decoder, head, b):
     return h, z.log_softmax(-1)
 
 
+def chunked_lm_ce(head, hs, tgt, chunk: int = 256):
+    """Mean token cross-entropy without materialising all [N, vocab] logits at once.
+
+    Each chunk's logits are recomputed in backward (activation checkpointing), so peak memory is
+    one chunk of logits (~254 MB for 256 tokens x 248k vocab in fp32) instead of the whole trace.
+    """
+    from torch.utils.checkpoint import checkpoint
+
+    def chunk_sum(h_, t_):
+        return F.cross_entropy(head(h_).float(), t_, reduction="sum")
+
+    total = hs.new_zeros((), dtype=torch.float32)
+    for i in range(0, hs.shape[0], chunk):
+        total = total + checkpoint(chunk_sum, hs[i : i + chunk], tgt[i : i + chunk], use_reentrant=False)
+    return total / hs.shape[0]
+
+
 def compute_loss(decoder, head, b, kl_w: float, lm_w: float):
     h, logp = letter_logp(decoder, head, b)
     t = b["target"]
@@ -102,8 +119,7 @@ def compute_loss(decoder, head, b, kl_w: float, lm_w: float):
     ce = torch.zeros((), device=h.device)
     if b["lm"] is not None:
         rows, pos, tgt = b["lm"]
-        logits = head(h[rows, pos]).float()
-        ce = F.cross_entropy(logits, tgt)
+        ce = chunked_lm_ce(head, h[rows, pos], tgt)
         loss = loss + lm_w * ce
     return loss, kl.detach(), ce.detach()
 
