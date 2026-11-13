@@ -47,7 +47,14 @@ compare it on public items only.
 | Hardware | 1× NVIDIA L4 (Google Colab), Transformers 5.22.2, bf16, batch size 1 (`--backend hf`) |
 | Temperatures | Fast mode 0.975, think mode 1.683; they ship in `nexus_config.json` |
 
-All figures below are on the test split after calibration, unless marked otherwise.
+All figures below are on the test split after calibration, unless marked otherwise. The 95%
+confidence intervals are percentile bootstrap intervals over items (2,000 resamples, seed 0). The
+tuned-minus-base difference uses a paired bootstrap.
+
+> **Not comparable to BANKING77 or CLINC150 leaderboards.** Those benchmarks are 77-way and
+> 150-way intent classification. Here each message becomes a typed question: the correct intent
+> among 3 to 11 distractors plus `none_of_these`, with the correct intent withheld in 15% of
+> in-scope cases, or a binary yes/no question (20%). See [data.md](data.md).
 
 ### Fast mode
 
@@ -62,7 +69,8 @@ All figures below are on the test split after calibration, unless marked otherwi
 | Teacher (deepseek-flash) | public | 1,200 | 0.892 | 0.869 | 0.070 | 0.180 | 0.544 | 0.826 | 0.030 |
 
 - **Against the base model**, the tuned model is better on every metric, in both the public and
-  the synthetic group.
+  the synthetic group. Accuracy gains, with 95% CIs: public +7.0 points (+5.3 to +8.7), synthetic
+  +5.8 (+3.1 to +8.5). Tuned accuracy on public items is 0.915 (0.898 to 0.931).
 - **Against the teacher**, on the public items with human gold labels, the student is more
   accurate (0.915 vs 0.892) and much better calibrated (ECE 0.020 vs 0.070). The teacher's
   synthetic score is 1.000 by construction, so it is left out.
@@ -81,6 +89,44 @@ Reversing the option order changes the base model's answer on 11.1% of items. Fo
 the figure is 3.6%. Averaging the canonical and the reversed order adds about half a point of
 accuracy. The runtime's `debias=True` does the same kind of averaging, over cyclic rotations of
 the options (see [protocol.md](protocol.md)).
+
+### Confidence thresholds
+
+Coverage and error when only answers at or above a confidence threshold are acted on, over the
+full test set:
+
+| Confidence ≥ | Coverage | Accuracy | Error |
+|---|---|---|---|
+| 0.50 | 97.4% | 92.5% | 7.5% |
+| 0.70 | 88.9% | 95.8% | 4.2% |
+| 0.80 | 83.7% | 96.8% | 3.2% |
+| 0.90 | 73.9% | 98.2% | 1.8% |
+| 0.95 | 68.3% | 98.6% | 1.4% |
+| 0.99 | 52.5% | 99.7% | 0.3% |
+
+### Breakdown
+
+Accuracy of the tuned model and of the base model:
+
+| Slice | n | Tuned | Base |
+|---|---|---|---|
+| Question type: choice | 1,265 | 0.911 | 0.834 |
+| Question type: binary | 404 | 0.936 | 0.899 |
+| Question type: score | 117 | 0.855 | 0.803 |
+| Options: 2 | 404 | 0.936 | 0.899 |
+| Options: 3–5 | 595 | 0.919 | 0.859 |
+| Options: 6–8 | 374 | 0.917 | 0.834 |
+| Options: 9+ | 413 | 0.877 | 0.789 |
+| Answer is a named option | 1,532 | 0.926 | 0.862 |
+| Answer is `none_of_these` (abstain) | 254 | 0.835 | 0.752 |
+| Source: banking77 | 600 | 0.877 | 0.793 |
+| Source: clinc150 | 600 | 0.953 | 0.897 |
+| Source: synthetic | 586 | 0.908 | 0.850 |
+
+The weakest areas are abstain cases, `score` questions, lists of 9 or more options, and two
+synthetic domains: moderation triage (0.818, n=55) and policy compliance (0.837, n=49). The
+per-domain, per-language and per-difficulty tables are in the model card and in
+`artifacts/eval/analysis.json`. Each non-English language has fewer than 30 test items.
 
 ### Think mode
 
@@ -101,13 +147,17 @@ roughly 45× the latency.
 
 | Machine | Runtime | Mode | p50 | p90 |
 |---|---|---|---|---|
-| NVIDIA L4 | Transformers, bf16 | fast | 93 ms | – |
-| NVIDIA L4 | Transformers, bf16 | think | 4.3 s | – |
+| NVIDIA L4 | Transformers, bf16 | fast | 93 ms | 157 ms |
+| NVIDIA L4 | Transformers, bf16 | think | 4.3 s | 8.3 s |
 | Apple M4, 24 GB | MLX, bf16 | fast | 795 ms | 1.3 s |
+| Apple M4, 24 GB | MLX, 8-bit | fast | 829 ms | 1.4 s |
+| Apple M4, 24 GB | MLX, 4-bit | fast | 785 ms | 1.3 s |
 
 Latency is wall-clock time for one question, batch size 1, for the canonical order only. The
-reversed-order pass is excluded. The M4 figure comes from 50 test items. On those items the MLX
-and the L4 predictions agree 50 out of 50 times.
+reversed-order pass is excluded. The M4 figures come from the same 50 test items. On those items
+the MLX bf16 answers match the L4 answers 50 times out of 50, and the 8-bit and 4-bit answers match
+MLX bf16 50 times out of 50. On a Mac, quantisation saves memory (4-bit is 2.2 GB, against 8.7 GB
+for bf16) but not time.
 
 ### Reproduce
 
@@ -120,4 +170,5 @@ python -m eval.run_eval --backend hf --mode think --name tuned --model <fused-mo
 uv run python -m eval.report --teacher
 uv run python -m eval.report --name base
 uv run python -m eval.report --name tuned      # writes artifacts/eval/nexus_config.json
+uv run python -m eval.analysis                 # CIs, breakdowns, thresholds -> artifacts/eval/analysis.json
 ```

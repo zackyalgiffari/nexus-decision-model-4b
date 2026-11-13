@@ -595,6 +595,7 @@ mlx = [
 release = [
     { name = "huggingface-hub" },
     { name = "jinja2" },
+    { name = "pyyaml" },
 ]
 train-gpu = [
     { name = "accelerate" },
@@ -625,6 +626,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "python-dotenv", marker = "extra == 'data'", specifier = ">=1.0" },
     { name = "pyyaml", marker = "extra == 'data'", specifier = ">=6.0" },
+    { name = "pyyaml", marker = "extra == 'release'", specifier = ">=6.0" },
     { name = "pyyaml", marker = "extra == 'train-gpu'", specifier = ">=6.0" },
     { name = "torch", marker = "extra == 'hf'", specifier = ">=2.6" },
     { name = "torch", marker = "extra == 'train-gpu'", specifier = ">=2.6" },

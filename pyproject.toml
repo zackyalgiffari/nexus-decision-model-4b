@@ -15,7 +15,7 @@ mlx = ["mlx-lm>=0.32"]
 hf = ["transformers>=5.0", "torch>=2.6", "accelerate>=1.0"]
 train-gpu = ["transformers>=5.0", "torch>=2.6", "accelerate>=1.0", "peft>=0.17", "pyyaml>=6.0"]
 data = ["openai>=1.50", "datasets>=3.0", "json-repair>=0.30", "python-dotenv>=1.0", "pyyaml>=6.0", "tqdm>=4.66"]
-release = ["huggingface_hub>=1.0", "jinja2>=3.1"]
+release = ["huggingface_hub>=1.0", "jinja2>=3.1", "pyyaml>=6.0"]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "ruff>=0.6"]

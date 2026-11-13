@@ -82,13 +82,15 @@ Original instructions:
 - `release/publish.py` defaults `--hardware` to A100. Pass
   `--hardware "1x NVIDIA L4 24GB (Google Colab), PyTorch + PEFT"`.
 
-## 5. Release (only after the final numbers are confirmed)
+## 5. Release (in progress, 2026-11-14)
 
-1. Log in with `! hf auth login` and note the HF username.
-2. Do a dry run and review `artifacts/fused/nexus-decision-4b/README.md`:
-   `uv run --no-sync python -m release.publish --user <hf-user> --model-dir artifacts/fused/nexus-decision-4b --mlx 4 8 --hardware "..." --dry-run`
-3. Run the README quick-start against the local folder, with Transformers and with MLX.
-4. Publish **private** first by running the same command without `--dry-run`. Then publish the dataset:
-   `uv run --no-sync python -m release.publish_dataset --user <hf-user>`
-5. Load the uploaded repo fresh and recheck. Then switch to public with `--public`, or in the HF UI.
-6. Delete this file before the repo goes public.
+Done: HF login (`zackyalgiffari`), dry run, quick-start check with Transformers and MLX, private GitHub repo.
+The private HF upload of the three model repos and the dataset was started on 2026-11-14. Its logs are
+`artifacts/logs/hf_upload_*.log`.
+
+The model card is now generated from `artifacts/eval/results.json` and `artifacts/eval/analysis.json`
+(`release/card.py`). It was restructured after the upload started, so once the upload finishes:
+
+1. Push the new card to the three repos: `uv run --no-sync python -m eval.analysis && uv run --no-sync python -m release.publish --user zackyalgiffari --model-dir artifacts/fused/nexus-decision-4b --mlx 4 8 --card-only`
+2. Load the uploaded repos fresh and recheck (Transformers quick start, MLX quick start, package).
+3. Delete this file, then make HF (models and dataset) and GitHub public together.

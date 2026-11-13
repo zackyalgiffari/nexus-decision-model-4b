@@ -1,10 +1,15 @@
-"""Render the model card and upload nexus-decision-4b (and optional variants) to the Hugging Face Hub.
+"""Render the model cards and upload nexus-decision-4b and its MLX variants to the Hugging Face Hub.
 
 Repos are created **private** by default. Pass --public only after reviewing them.
 
 Usage:
-    uv run python -m release.publish --user <hf-username> --model-dir artifacts/fused/nexus-decision-4b \
+    uv run python -m eval.analysis                       # refresh the numbers the card uses
+    uv run python -m release.publish --user <hf-user> --model-dir artifacts/fused/nexus-decision-4b \
         [--mlx 4 8] [--public] [--dry-run]
+    # write the cards somewhere else, without touching the model folders:
+    uv run python -m release.publish --user <hf-user> --model-dir ... --mlx 4 8 --preview /tmp/cards
+    # re-upload only README.md to repos that already exist:
+    uv run python -m release.publish --user <hf-user> --model-dir ... --mlx 4 8 --card-only
 """
 
 from __future__ import annotations
@@ -16,29 +21,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from jinja2 import Template
+from release.card import context, render
 
 ROOT = Path(__file__).resolve().parents[1]
 EVAL = ROOT / "artifacts" / "eval"
-METRICS = [("accuracy", "acc", "{:.3f}"), ("macro_f1", "F1", "{:.3f}"), ("ece", "ECE", "{:.3f}"),
-           ("brier", "Brier", "{:.3f}"), ("coverage_at_5pct_error", "cov@5%", "{:.2f}"),
-           ("order_flip_rate", "flip", "{:.3f}"), ("latency_ms_p50", "p50 ms", "{:.0f}")]
-RUNS = [("tuned", "**nexus-decision-4b**"), ("base", "Qwen3.5-4B (base, same prompt)"),
-        ("teacher", "DeepSeek-V4.1-Flash (teacher)")]
-
-
-def results_table(results: dict) -> str:
-    head = "| Split | Model | " + " | ".join(h for _, h, _ in METRICS) + " |"
-    sep = "|---|---|" + "---|" * len(METRICS)
-    rows = [head, sep]
-    for group in ("public", "synthetic"):
-        for run, label in RUNS:
-            m = results.get(run, {}).get("fast", {}).get("test", {}).get(group)
-            if not m:
-                continue
-            cells = [fmt.format(m[k]) if k in m else "-" for k, _, fmt in METRICS]
-            rows.append(f"| {group} (n={m['n']}) | {label} | " + " | ".join(cells) + " |")
-    return "\n".join(rows)
 
 
 def main() -> None:
@@ -47,45 +33,60 @@ def main() -> None:
     ap.add_argument("--model-dir", required=True)
     ap.add_argument("--name", default="nexus-decision-4b")
     ap.add_argument("--github", default="zackyalgiffari/nexus-decision-model-4b", help="GitHub repo with the code")
+    ap.add_argument("--train-info", default="artifacts/adapters/colab/final/nexus_train.json",
+                    help="nexus_train.json written by the trainer next to the adapter")
     ap.add_argument("--mlx", nargs="*", type=int, default=[], help="MLX quantisations, e.g. 4 8")
+    ap.add_argument("--hardware", default="1× NVIDIA L4 24 GB (Google Colab), PyTorch + PEFT, about 5.5 h")
     ap.add_argument("--public", action="store_true")
-    ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--hardware", default="1x NVIDIA L4 24GB (Google Colab), PyTorch + PEFT")
-    ap.add_argument("--latency-note", default="on an NVIDIA L4 (Transformers, bf16), batch size 1, canonical order only; "
-                    "on an Apple M4 (24 GB) with MLX bf16 the fast-mode p50 is about 0.8 s")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true", help="prepare folders, upload nothing")
+    mode.add_argument("--preview", metavar="DIR", help="write the cards to DIR only")
+    mode.add_argument("--card-only", action="store_true", help="upload README.md to existing repos")
     args = ap.parse_args()
 
     model_dir = Path(args.model_dir)
-    results = json.loads((EVAL / "results.json").read_text())
-    stats = json.loads((ROOT / "artifacts" / "data" / "stats.json").read_text())
-    data_summary = (f"{stats.get('train_fast', 0):,} fast records and {stats.get('train_think', 0):,} "
-                    "think records (synthetic scenarios in 12 domains plus BANKING77 and CLINC150)")
-    template = Template((ROOT / "release" / "model_card.md.j2").read_text(), keep_trailing_newline=True)
+    train_path = ROOT / args.train_info
+    train_info = json.loads(train_path.read_text()) if train_path.exists() else None
+    if train_info is None:
+        sys.exit(f"{train_path} missing: pass --train-info")
+    ctx = context(args.user, args.github, args.hardware, train_info)
 
-    def render(repo_name: str, mlx_bits: int | None = None) -> str:
-        return template.render(
-            hf_user=args.user, repo_name=repo_name, mlx_bits=mlx_bits, gh_repo=args.github, results_table=results_table(results),
-            data_summary=data_summary, hardware=args.hardware, latency_note=args.latency_note,
-        )
+    repos = [(args.name, None, model_dir)]
+    repos += [(f"{args.name}-MLX-{b}bit", b, ROOT / "artifacts" / "release" / f"{args.name}-MLX-{b}bit")
+              for b in args.mlx]
+    cards = {name: render(ctx, name, bits) for name, bits, _ in repos}
 
-    card = render(args.name)
-    (model_dir / "README.md").write_text(card)
+    if args.preview:
+        out = Path(args.preview)
+        out.mkdir(parents=True, exist_ok=True)
+        for name, card in cards.items():
+            (out / f"{name}.md").write_text(card)
+        print(f"cards written to {out}")
+        return
+
+    if args.card_only:
+        from huggingface_hub import HfApi
+
+        api = HfApi()
+        for name, _, folder in repos:
+            (folder / "README.md").write_text(cards[name])
+            api.upload_file(path_or_fileobj=str(folder / "README.md"), path_in_repo="README.md",
+                            repo_id=f"{args.user}/{name}", commit_message="Update model card")
+            print(f"card updated: https://huggingface.co/{args.user}/{name}")
+        return
+
     cfg = EVAL / "nexus_config.json"
-    if cfg.exists():
-        shutil.copyfile(cfg, model_dir / "nexus_config.json")
-    if not (model_dir / "nexus_config.json").exists():
-        sys.exit("nexus_config.json missing: run eval.report first")
-    print(f"model card written to {model_dir / 'README.md'}")
-
-    variants = []
-    for bits in args.mlx:
-        out = ROOT / "artifacts" / "release" / f"{args.name}-MLX-{bits}bit"
-        if not out.exists():
+    if not cfg.exists():
+        sys.exit("artifacts/eval/nexus_config.json missing: run eval.report first")
+    for name, bits, folder in repos:
+        if bits and not folder.exists():
             subprocess.run([sys.executable, "-m", "mlx_lm", "convert", "--hf-path", str(model_dir),
-                            "--mlx-path", str(out), "-q", "--q-bits", str(bits)], check=True)
-        shutil.copyfile(model_dir / "nexus_config.json", out / "nexus_config.json")
-        (out / "README.md").write_text(render(f"{args.name}-MLX-{bits}bit", bits))
-        variants.append((out, f"{args.user}/{args.name}-MLX-{bits}bit"))
+                            "--mlx-path", str(folder), "-q", "--q-bits", str(bits)], check=True)
+        shutil.copyfile(cfg, folder / "nexus_config.json")
+        (folder / "README.md").write_text(cards[name])
+        for junk in folder.rglob(".DS_Store"):
+            junk.unlink()
+    print("cards written: " + ", ".join(str(f / "README.md") for _, _, f in repos))
 
     if args.dry_run:
         print("dry run: nothing uploaded")
@@ -93,7 +94,8 @@ def main() -> None:
     from huggingface_hub import HfApi
 
     api = HfApi()
-    for folder, repo in [(model_dir, f"{args.user}/{args.name}"), *variants]:
+    for name, _, folder in repos:
+        repo = f"{args.user}/{name}"
         api.create_repo(repo, private=not args.public, exist_ok=True)
         api.upload_folder(repo_id=repo, folder_path=str(folder), commit_message="Upload nexus-decision-4b")
         print(f"uploaded https://huggingface.co/{repo} ({'public' if args.public else 'private'})")
