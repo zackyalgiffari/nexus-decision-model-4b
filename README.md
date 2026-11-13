@@ -27,7 +27,7 @@ uv sync --extra mlx          # Apple silicon
 ```python
 from nexus_decision import NexusDecision
 
-nd = NexusDecision.from_pretrained("<user>/nexus-decision-4b", backend="mlx")  # or backend="hf"
+nd = NexusDecision.from_pretrained("zackyalgiffari/nexus-decision-4b", backend="mlx")  # or backend="hf"
 
 res = nd.decide({
     "state": {"channel": "email", "body": "I was billed twice for order #4471, please fix it today."},

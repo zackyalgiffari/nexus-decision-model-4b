@@ -115,17 +115,22 @@ print(decide(
 - **score** questions: use the rubric levels in ascending order as options.
 
 The `nexus_decision` Python package wraps all of this. It adds think mode, option-order debiasing
-and an MLX backend:
+and an MLX backend. Its source, training pipeline and docs are in
+[github.com/{{ gh_repo }}](https://github.com/{{ gh_repo }}).
+
+```bash
+pip install "nexus-decision[{% if mlx_bits %}mlx{% else %}hf{% endif %}] @ git+https://github.com/{{ gh_repo }}"
+```
 
 ```python
 from nexus_decision import NexusDecision
-nd = NexusDecision.from_pretrained("{{ hf_user }}/nexus-decision-4b", backend="hf")   # or "mlx"
+nd = NexusDecision.from_pretrained("{{ hf_user }}/{{ repo_name }}", backend="{% if mlx_bits %}mlx{% else %}hf{% endif %}")
 nd.decide({"state": {...}, "questions": {...}}, mode="fast", debias=True)
 ```
 
 ## Prompt protocol
 
-The protocol is documented in full in the project repository (`docs/protocol.md`). In short:
+The protocol is documented in full in [docs/protocol.md](https://github.com/{{ gh_repo }}/blob/main/docs/protocol.md). In short:
 
 - One question per forward pass.
 - Options are shown with letters `A`, `B`, and so on.

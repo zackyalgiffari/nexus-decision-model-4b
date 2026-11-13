@@ -46,6 +46,7 @@ def main() -> None:
     ap.add_argument("--user", required=True)
     ap.add_argument("--model-dir", required=True)
     ap.add_argument("--name", default="nexus-decision-4b")
+    ap.add_argument("--github", default="zackyalgiffari/nexus-decision-model-4b", help="GitHub repo with the code")
     ap.add_argument("--mlx", nargs="*", type=int, default=[], help="MLX quantisations, e.g. 4 8")
     ap.add_argument("--public", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
@@ -63,7 +64,7 @@ def main() -> None:
 
     def render(repo_name: str, mlx_bits: int | None = None) -> str:
         return template.render(
-            hf_user=args.user, repo_name=repo_name, mlx_bits=mlx_bits, results_table=results_table(results),
+            hf_user=args.user, repo_name=repo_name, mlx_bits=mlx_bits, gh_repo=args.github, results_table=results_table(results),
             data_summary=data_summary, hardware=args.hardware, latency_note=args.latency_note,
         )
 
