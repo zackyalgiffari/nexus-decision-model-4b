@@ -82,15 +82,16 @@ Original instructions:
 - `release/publish.py` defaults `--hardware` to A100. Pass
   `--hardware "1x NVIDIA L4 24GB (Google Colab), PyTorch + PEFT"`.
 
-## 5. Release (in progress, 2026-11-14)
+## 5. Release (private upload verified, 2026-11-14)
 
-Done: HF login (`zackyalgiffari`), dry run, quick-start check with Transformers and MLX, private GitHub repo.
-The private HF upload of the three model repos and the dataset was started on 2026-11-14. Its logs are
-`artifacts/logs/hf_upload_*.log`.
+All four repos are on the Hub as **private**, uploaded with `HF_XET_HIGH_PERFORMANCE=1` (about 6x faster than
+the default): `zackyalgiffari/nexus-decision-4b`, `-MLX-4bit`, `-MLX-8bit`, and the dataset
+`zackyalgiffari/nexus-decision-data`.
 
-The model card is now generated from `artifacts/eval/results.json` and `artifacts/eval/analysis.json`
-(`release/card.py`). It was restructured after the upload started, so once the upload finishes:
+Verified: every weight file matches the local SHA-256; the README on the Hub matches the generated card; a
+fresh download of the MLX 4-bit repo runs the card's quick start and the package installed from GitHub.
 
-1. Push the new card to the three repos: `uv run --no-sync python -m eval.analysis && uv run --no-sync python -m release.publish --user zackyalgiffari --model-dir artifacts/fused/nexus-decision-4b --mlx 4 8 --card-only`
-2. Load the uploaded repos fresh and recheck (Transformers quick start, MLX quick start, package).
-3. Delete this file, then make HF (models and dataset) and GitHub public together.
+Remaining, after the user approves:
+
+1. Delete this file and push.
+2. Make the three model repos, the dataset and the GitHub repo public together.
