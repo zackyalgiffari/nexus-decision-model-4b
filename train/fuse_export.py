@@ -52,7 +52,19 @@ def peft_to_hf(module: str) -> str:
     return "model.language_model." + module[len(prefix):]
 
 
-def load_peft_deltas(adapter_dir: Path, cfg: dict) -> dict[str, torch.Tensor]:
+class LazyDeltas(dict):
+    """Maps HF weight key -> (scale, B, A); `delta(k)` computes scale * B @ A on demand.
+
+    Materialising every delta up front costs ~4 bytes per merged parameter (~14 GB for all 32
+    blocks of Qwen3.5-4B); computing one at a time keeps peak memory at one shard.
+    """
+
+    def delta(self, k: str) -> torch.Tensor:
+        scale, b, a = self[k]
+        return scale * (b @ a)
+
+
+def load_peft_deltas(adapter_dir: Path, cfg: dict) -> LazyDeltas:
     if cfg.get("use_dora") or cfg.get("use_rslora"):
         raise ValueError("only plain LoRA adapters are supported")
     scale = float(cfg["lora_alpha"]) / float(cfg["r"])
@@ -61,15 +73,15 @@ def load_peft_deltas(adapter_dir: Path, cfg: dict) -> dict[str, torch.Tensor]:
         for k in f.keys():  # noqa: SIM118 (safe_open has no __iter__)
             module, leaf = k.rsplit(".", 2)[0], k.rsplit(".", 2)[1]  # ...lora_A.weight
             pairs[module][leaf] = f.get_tensor(k).float()
-    deltas = {}
+    deltas = LazyDeltas()
     for module, ab in pairs.items():
         if set(ab) != {"lora_A", "lora_B"}:
             raise ValueError(f"{module}: expected lora_A/lora_B, got {sorted(ab)}")
-        deltas[peft_to_hf(module) + ".weight"] = scale * ab["lora_B"] @ ab["lora_A"]
+        deltas[peft_to_hf(module) + ".weight"] = (scale, ab["lora_B"], ab["lora_A"])
     return deltas
 
 
-def load_deltas(adapter_dir: Path) -> dict[str, torch.Tensor]:
+def load_deltas(adapter_dir: Path) -> LazyDeltas:
     """Load LoRA deltas from an MLX (train_mlx.py) or PEFT (train_torch.py) adapter directory."""
     cfg = json.loads((adapter_dir / "adapter_config.json").read_text())
     if (adapter_dir / "adapter_model.safetensors").exists():
@@ -80,11 +92,11 @@ def load_deltas(adapter_dir: Path) -> dict[str, torch.Tensor]:
         for k in f.keys():  # noqa: SIM118
             module, leaf = k.rsplit(".", 1)
             pairs[module][leaf] = f.get_tensor(k).float()
-    deltas = {}
+    deltas = LazyDeltas()
     for module, ab in pairs.items():
         if set(ab) != {"lora_a", "lora_b"}:
             raise ValueError(f"{module}: expected lora_a/lora_b, got {sorted(ab)}")
-        deltas[mlx_to_hf(module) + ".weight"] = scale * ab["lora_b"].T @ ab["lora_a"].T
+        deltas[mlx_to_hf(module) + ".weight"] = (scale, ab["lora_b"].T, ab["lora_a"].T)
     return deltas
 
 
@@ -113,10 +125,11 @@ def main() -> None:
         for k in list(tensors):
             if k in deltas:
                 w = tensors[k]
-                d = deltas[k]
+                d = deltas.delta(k)
                 if d.shape != w.shape:
                     raise ValueError(f"{k}: delta {tuple(d.shape)} vs weight {tuple(w.shape)}")
                 tensors[k] = (w.float() + d).to(w.dtype)
+                del d
                 merged += 1
         save_file(tensors, str(out / shard), metadata={"format": "pt"})
         print(f"wrote {shard}")
