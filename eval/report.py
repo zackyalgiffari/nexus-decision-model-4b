@@ -97,7 +97,9 @@ def main() -> None:
         results[args.name] = entry
         if not args.no_fit and cfg["temperature"]:
             cfg["temperature"].setdefault("think", cfg["temperature"].get("fast", 1.0))
-            save_config(cfg, EVAL / "nexus_config.json")
+            # Only the tuned run's temperatures ship with the model; other runs keep their own file.
+            name = "nexus_config.json" if args.name == "tuned" else f"nexus_config_{args.name}.json"
+            save_config(cfg, EVAL / name)
 
     res_path.write_text(json.dumps(results, indent=2))
     print(json.dumps({k: v for k, v in results.items() if k in (args.name, "teacher")}, indent=2))

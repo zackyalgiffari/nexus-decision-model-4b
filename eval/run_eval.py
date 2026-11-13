@@ -72,11 +72,12 @@ def main() -> None:
         done = {json.loads(x)["key"] for x in path.read_text().splitlines()}
     reverse = not args.no_reverse and args.mode == "fast"
 
+    todo = [it for it in items if f"{it['sid']}/{it['question']}" not in done]
+    print(f"{path.name}: {len(items) - len(todo)} done, {len(todo)} to go", flush=True)
+    t_start = time.perf_counter()
     with path.open("a") as f:
-        for it in items:
+        for i, it in enumerate(todo, 1):
             key = f"{it['sid']}/{it['question']}"
-            if key in done:
-                continue
             q = parse_question(it["q"])
             labels = it["labels"]
             n = len(labels)
@@ -99,6 +100,9 @@ def main() -> None:
                 rec["logits_reversed"] = to_canonical(rq2.labels, labels, z2)
             f.write(json.dumps(rec) + "\n")
             f.flush()
+            if i % 100 == 0 or i == len(todo):
+                el = time.perf_counter() - t_start
+                print(f"  {i}/{len(todo)}  {el / i:.2f}s/item  eta {(len(todo) - i) * el / i / 60:.1f} min", flush=True)
     print(f"-> {path}")
 
 
