@@ -13,7 +13,7 @@ This is a working note for resuming the project. Delete it before the repo goes 
 | Sanity check | 60 test items, fast mode, MLX on M4. Tuned acc 0.950 vs base 0.883. p50 latency 0.82 s, which includes the reversed-order pass. |
 | Full evaluation | **Done 2026-11-14** (Colab L4). Test, calibrated, fast mode: tuned acc 0.913 / ECE 0.017 / flip 0.036 vs base 0.847 / 0.020 / 0.111; teacher acc 0.927. Think mode (300 items) acc 0.880 vs fast 0.887 on the same items, p50 4.3 s. Results are in `artifacts/eval/results.json`; `artifacts/eval/nexus_config.json` (T fast 0.975, think 1.683) ships with the model. The pre-eval results file is kept as `results_before_full_eval.json`. |
 | Old base eval | The MLX base test run was renamed to `artifacts/eval/base_mlx_test_fast.jsonl`. The `base` entry in `artifacts/eval/results.json` is still from that MLX run. It will be overwritten. |
-| Git | Local commits only. There is no remote, so the code and `artifacts/data/` exist only on this Mac. |
+| Git | Private GitHub repo `zackyalgiffari/nexus-decision-model-4b` (created 2026-11-14). Make it public together with the model, after deleting this file. `artifacts/` is not in git. |
 
 ## 0. Move the repo out of iCloud (done 2026-11-13)
 
