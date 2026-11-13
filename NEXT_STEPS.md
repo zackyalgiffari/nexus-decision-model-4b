@@ -47,7 +47,12 @@ uv run --no-sync python -m eval.report --name tuned   # writes nexus_config.json
 Check that tuned beats base on accuracy and ECE for the public and the synthetic test groups.
 Check the flip rate as well.
 
-## 3. Latency on the M4 (a few minutes)
+## 3. Latency on the M4 (measured 2026-11-14)
+
+Result: 50 test items, fast mode, MLX bf16, no reversed pass: p50 795 ms, p90 1.3 s (first item 1.9 s with warm-up).
+On the same items the L4 p50 is 91 ms. MLX and L4 predictions agree on 50/50. Output: `artifacts/eval/tuned_m4_test_fast.jsonl`.
+
+Original instructions:
 
 The latency in the Colab results is L4 GPU latency. For the model card, also measure on the Mac:
 
