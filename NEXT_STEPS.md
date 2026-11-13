@@ -66,7 +66,13 @@ Then decide what the card reports. Either:
 - pass `--latency-note "on an NVIDIA L4 (Transformers, bf16), batch size 1"` to `release/publish.py`, or
 - add the M4 number to the card text.
 
-## 4. Docs
+## 4. Docs (done 2026-11-14)
+
+`docs/evaluation.md` has a Results section, and `docs/training.md` has the released L4 run. Think mode is
+documented as a reasoning/explanation feature, not an accuracy gain. The `--hardware` note below still applies
+at release time.
+
+Original instructions:
 
 - Fill `docs/evaluation.md` and `docs/training.md` with the real numbers. Training ran on an **L4**,
   not an A100. Use these values:

@@ -19,8 +19,8 @@ attention.
 - **The partial fix.** `train/mlx_patches.py` vendors the chunk-parallel form from the open
   upstream PR ml-explore/mlx-lm#2021. That raises it to about 45 tok/s with LoRA on 24 layers,
   or about 70 tok/s on 12 layers. That is still too slow for a dataset of about 13M tokens.
-- **The GPU path.** On CUDA, `flash-linear-attention` provides fused kernels, so the same run
-  takes a few hours.
+- **The GPU path.** On CUDA, `flash-linear-attention` provides fused kernels. The released run
+  took about 5.5 hours on a single Colab L4.
 
 ## Objective
 
@@ -34,18 +34,50 @@ loss = kl_weight * KL(target || softmax(letter logits at the answer position))
 Only the answer position (and, for think records, the completion) is projected through the LM
 head. The 248k-token vocabulary never gets materialised for the prompt tokens.
 
-## Default hyper-parameters (`train/configs/colab_a100.yaml`)
+## Hyper-parameters
+
+The released run used `train/configs/colab_l4.yaml`:
 
 | | |
 |---|---|
 | LoRA layers | All 32 decoder blocks, all linear projections (attention, Gated DeltaNet, MLP) |
-| Rank / alpha | 16 / 32 |
+| Rank / alpha / dropout | 16 / 32 / 0 |
+| Trainable parameters | 32.5M (0.77% of 4.24B) |
 | Optimiser | AdamW, lr 1e-4, 50 warm-up steps, cosine decay, grad-norm clip 1.0 |
-| Batch | 8 fast records (or 2 think records) × 2 accumulation steps, length-grouped |
+| Batch | 4 fast records (or 1 think record) × 4 accumulation steps, length-grouped |
 | Epochs | 2 |
 | Max length | 2,048 tokens |
 | Loss weights | KL 1.0, LM 0.5 |
-| Memory | Gradient checkpointing on the decoder blocks |
+| Precision / memory | bf16, gradient checkpointing on the decoder blocks |
+
+`train/configs/colab_a100.yaml` has the same settings and the same effective batch, sized for
+40–80 GB: 8 fast records (or 2 think records) × 2 accumulation steps.
+
+## Released run
+
+| | |
+|---|---|
+| Hardware | 1× NVIDIA L4 24 GB (Google Colab), PyTorch + PEFT |
+| Data | 16,340 training records (4,004 with think traces), 300 validation items |
+| Steps | 3,544 optimiser steps over 2 epochs |
+| Time | About 5.5 h |
+| Throughput | About 870 tok/s (median) |
+| Peak memory | 13.2 GB |
+| Final validation | `val_soft_ce` 0.264, `val_agree` 0.917 |
+
+Validation was measured every 200 steps on 300 items:
+
+| Step | 200 | 600 | 1,000 | 1,400 | 2,000 | 2,400 | 2,800 | 3,200 | 3,544 |
+|---|---|---|---|---|---|---|---|---|---|
+| `val_soft_ce` | 0.360 | 0.375 | 0.323 | 0.308 | 0.276 | 0.279 | 0.267 | 0.264 | 0.264 |
+| `val_agree` | 0.850 | 0.877 | 0.887 | 0.890 | 0.903 | 0.910 | 0.907 | 0.917 | 0.917 |
+
+Both curves were nearly flat over the last 600 steps, while the cosine schedule took the learning
+rate to zero. Colab had no
+`causal_conv1d` installed, so the Gated DeltaNet short convolution ran on its reference PyTorch
+path. Installing it should make the run faster.
+
+For test-set results see [evaluation.md](evaluation.md).
 
 ## Running
 
@@ -53,7 +85,7 @@ On Colab, follow `notebooks/train_colab.ipynb`. It needs `scripts/pack_colab.sh`
 upload. On any CUDA machine:
 
 ```bash
-python train/train_torch.py --config train/configs/colab_a100.yaml            # add --resume to continue
+python train/train_torch.py --config train/configs/colab_l4.yaml     # or colab_a100.yaml; add --resume to continue
 ```
 
 On Apple silicon:

@@ -74,7 +74,7 @@ uv run python -m data.label_fast --orders 3 --offpeak-only
 uv run python -m data.label_think --n 4000 --offpeak-only
 uv run python -m data.build_splits
 
-# 2. training on a CUDA GPU (Colab A100: notebooks/train_colab.ipynb)
+# 2. training on a CUDA GPU (Colab L4 or A100: notebooks/train_colab.ipynb)
 scripts/pack_colab.sh                                   # upload the zip to Google Drive
 #    ...run the notebook, then download adapters/run1/final -> artifacts/adapters/colab/final
 
