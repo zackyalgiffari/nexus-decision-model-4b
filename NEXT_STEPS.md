@@ -11,7 +11,7 @@ This is a working note for resuming the project. Delete it before the repo goes 
 | Adapter | `artifacts/adapters/colab/final/` (PEFT), plus a copy on Drive at `MyDrive/nexus-decision-4b/adapters/run1/final`. The training log is `artifacts/adapters/colab/console.log`. |
 | Merged model | `artifacts/fused/nexus-decision-4b/` (8.7 GB). Rebuild it in about 25 s with `uv run --no-sync python train/fuse_export.py --adapters artifacts/adapters/colab/final --out artifacts/fused/nexus-decision-4b`. |
 | Sanity check | 60 test items, fast mode, MLX on M4. Tuned acc 0.950 vs base 0.883. p50 latency 0.82 s, which includes the reversed-order pass. |
-| Full evaluation | **Not run yet.** Prepared to run on Colab: `notebooks/eval_colab.ipynb` and `artifacts/colab/nexus-eval.zip`; rebuild the zip with `bash scripts/pack_colab_eval.sh`. |
+| Full evaluation | **Done 2026-11-14** (Colab L4). Test, calibrated, fast mode: tuned acc 0.913 / ECE 0.017 / flip 0.036 vs base 0.847 / 0.020 / 0.111; teacher acc 0.927. Think mode (300 items) acc 0.880 vs fast 0.887 on the same items, p50 4.3 s. Results are in `artifacts/eval/results.json`; `artifacts/eval/nexus_config.json` (T fast 0.975, think 1.683) ships with the model. The pre-eval results file is kept as `results_before_full_eval.json`. |
 | Old base eval | The MLX base test run was renamed to `artifacts/eval/base_mlx_test_fast.jsonl`. The `base` entry in `artifacts/eval/results.json` is still from that MLX run. It will be overwritten. |
 | Git | Local commits only. There is no remote, so the code and `artifacts/data/` exist only on this Mac. |
 
@@ -22,7 +22,7 @@ The repo now lives at `~/Programming/nexus-decision-model-4b`, outside the iClou
 path. `~/Documents/Programming` is now a symlink to `~/Programming`, so old paths still resolve. It is the same folder,
 not a second copy: never delete through that path.
 
-## 1. Full evaluation on Colab (about 40 min on L4)
+## 1. Full evaluation on Colab (done 2026-11-14)
 
 1. Upload `artifacts/colab/nexus-eval.zip` to `MyDrive/nexus-decision-4b/`.
 2. Open `notebooks/eval_colab.ipynb` in Colab and select an L4 GPU.
@@ -36,7 +36,7 @@ not a second copy: never delete through that path.
    then run the test subset (300).
 5. Download every `*.jsonl` file from `MyDrive/nexus-decision-4b/eval/` into `artifacts/eval/`.
 
-## 2. Report and calibration (local, seconds)
+## 2. Report and calibration (done 2026-11-14)
 
 ```bash
 uv run --no-sync python -m eval.report --teacher
