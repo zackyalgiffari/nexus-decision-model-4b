@@ -49,8 +49,9 @@ def main() -> None:
     ap.add_argument("--mlx", nargs="*", type=int, default=[], help="MLX quantisations, e.g. 4 8")
     ap.add_argument("--public", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--hardware", default="1x NVIDIA A100 40GB (Google Colab), PyTorch + PEFT")
-    ap.add_argument("--latency-note", default="with MLX bf16 on an Apple M4 (24 GB), batch size 1")
+    ap.add_argument("--hardware", default="1x NVIDIA L4 24GB (Google Colab), PyTorch + PEFT")
+    ap.add_argument("--latency-note", default="on an NVIDIA L4 (Transformers, bf16), batch size 1, canonical order only; "
+                    "on an Apple M4 (24 GB) with MLX bf16 the fast-mode p50 is about 0.8 s")
     args = ap.parse_args()
 
     model_dir = Path(args.model_dir)
@@ -58,10 +59,15 @@ def main() -> None:
     stats = json.loads((ROOT / "artifacts" / "data" / "stats.json").read_text())
     data_summary = (f"{stats.get('train_fast', 0):,} fast records and {stats.get('train_think', 0):,} "
                     "think records (synthetic scenarios in 12 domains plus BANKING77 and CLINC150)")
-    card = Template((ROOT / "release" / "model_card.md.j2").read_text()).render(
-        hf_user=args.user, results_table=results_table(results), data_summary=data_summary,
-        hardware=args.hardware, latency_note=args.latency_note,
-    )
+    template = Template((ROOT / "release" / "model_card.md.j2").read_text(), keep_trailing_newline=True)
+
+    def render(repo_name: str, mlx_bits: int | None = None) -> str:
+        return template.render(
+            hf_user=args.user, repo_name=repo_name, mlx_bits=mlx_bits, results_table=results_table(results),
+            data_summary=data_summary, hardware=args.hardware, latency_note=args.latency_note,
+        )
+
+    card = render(args.name)
     (model_dir / "README.md").write_text(card)
     cfg = EVAL / "nexus_config.json"
     if cfg.exists():
@@ -77,10 +83,7 @@ def main() -> None:
             subprocess.run([sys.executable, "-m", "mlx_lm", "convert", "--hf-path", str(model_dir),
                             "--mlx-path", str(out), "-q", "--q-bits", str(bits)], check=True)
         shutil.copyfile(model_dir / "nexus_config.json", out / "nexus_config.json")
-        (out / "README.md").write_text(
-            card.replace(f"{args.user}/{args.name}\"", f"{args.user}/{args.name}-MLX-{bits}bit\"", 1)
-            + f"\n\n> This repo holds the MLX {bits}-bit quantisation of "
-            f"[{args.user}/{args.name}](https://huggingface.co/{args.user}/{args.name}).\n")
+        (out / "README.md").write_text(render(f"{args.name}-MLX-{bits}bit", bits))
         variants.append((out, f"{args.user}/{args.name}-MLX-{bits}bit"))
 
     if args.dry_run:
