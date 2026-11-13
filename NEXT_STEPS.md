@@ -13,29 +13,14 @@ This is a working note for resuming the project. Delete it before the repo goes 
 | Sanity check | 60 test items, fast mode, MLX on M4. Tuned acc 0.950 vs base 0.883. p50 latency 0.82 s, which includes the reversed-order pass. |
 | Full evaluation | **Not run yet.** Prepared to run on Colab: `notebooks/eval_colab.ipynb` and `artifacts/colab/nexus-eval.zip`; rebuild the zip with `bash scripts/pack_colab_eval.sh`. |
 | Old base eval | The MLX base test run was renamed to `artifacts/eval/base_mlx_test_fast.jsonl`. The `base` entry in `artifacts/eval/results.json` is still from that MLX run. It will be overwritten. |
-| Git | Local commits only. There is no remote. |
+| Git | Local commits only. There is no remote, so the code and `artifacts/data/` exist only on this Mac. |
 
-## 0. Move the repo out of iCloud first (recommended)
+## 0. Move the repo out of iCloud (done 2026-11-13)
 
-`~/Documents` is synced by iCloud ("Desktop & Documents Folders" is on). This causes four problems:
-
-- **Upload failure.** iCloud is trying to upload the 20 GB repo, and the upload fails with
-  `Quota exceeded` (about 0.8 GB left).
-- **Evicted files.** iCloud has evicted files to "dataless" placeholders: 65k of them under
-  `~/Documents`.
-- **Conflict copies** such as `* 2.pth` and `WHEEL 2` in `.venv`.
-- **Hidden flag on `.pth` files**, which breaks the editable install.
-
-Steps:
-
-1. Make sure no process is using the repo, then move it:
-   `mkdir -p ~/Developer && mv ~/Documents/Programming/nexus-decision-model-4b ~/Developer/`
-2. Recreate the virtualenv: `cd ~/Developer/nexus-decision-model-4b && rm -rf .venv && uv sync --all-extras`.
-   Then run `uv run pytest -q`. Expect 13 tests to pass.
-3. Copy the Claude Code memory, which is keyed by the project path:
-   `cp -R ~/.claude/projects/-Users-zacky-Documents-Programming-nexus-decision-model-4b/memory ~/.claude/projects/-Users-zacky-Developer-nexus-decision-model-4b/`
-   Create the target folder first if it does not exist.
-4. Start Claude Code from the new folder.
+The repo now lives at `~/Programming/nexus-decision-model-4b`, outside the iCloud-synced `~/Documents`.
+`.venv` was rebuilt, and `uv run pytest -q` passes (13 tests). The Claude Code memory was copied to the new project
+path. `~/Documents/Programming` is now a symlink to `~/Programming`, so old paths still resolve. It is the same folder,
+not a second copy: never delete through that path.
 
 ## 1. Full evaluation on Colab (about 40 min on L4)
 
