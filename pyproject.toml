@@ -4,11 +4,19 @@ version = "0.1.0"
 description = "Runtime and training pipeline for nexus-decision-4b, an open-weight typed decision model with calibrated probabilities."
 readme = "README.md"
 license = "Apache-2.0"
+authors = [{ name = "zackyalgiffari" }]
+keywords = ["decision-making", "calibration", "distillation", "routing", "classification", "llm"]
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "pydantic>=2.7",
     "numpy>=1.26",
 ]
+
+[project.urls]
+Homepage = "https://huggingface.co/collections/zackyalgiffari/nexus-decision-4b-6af7fc5003be12bf9aa5b4c9"
+Repository = "https://github.com/zackyalgiffari/nexus-decision-model-4b"
+Model = "https://huggingface.co/zackyalgiffari/nexus-decision-4b"
+Dataset = "https://huggingface.co/datasets/zackyalgiffari/nexus-decision-data"
 
 [project.optional-dependencies]
 mlx = ["mlx-lm>=0.32"]

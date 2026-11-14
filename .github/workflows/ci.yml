@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.3.3
+      - name: Install (no model extras)
+        run: uv sync --locked
+      - name: Lint
+        run: uv run --locked ruff check .
+      - name: Test
+        run: uv run --locked pytest -q
