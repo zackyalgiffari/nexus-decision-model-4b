@@ -7,6 +7,7 @@ list form; metrics only use the top probability and the probability of the true 
 
 from __future__ import annotations
 
+import itertools
 from collections.abc import Sequence
 
 import numpy as np
@@ -62,7 +63,7 @@ def ece(probs, labels, n_bins: int = 15) -> float:
     edges = np.linspace(0.0, 1.0, n_bins + 1)
     total = len(conf)
     err = 0.0
-    for lo, hi in zip(edges[:-1], edges[1:]):
+    for lo, hi in itertools.pairwise(edges):
         mask = (conf > lo) & (conf <= hi) if lo > 0 else (conf >= lo) & (conf <= hi)
         if mask.any():
             err += mask.sum() / total * abs(correct[mask].mean() - conf[mask].mean())

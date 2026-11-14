@@ -20,17 +20,17 @@ def logits(nd):
     return np.asarray(z)
 
 
-from nexus_decision.runtime_mlx import MLXBackend  # noqa: E402
+from nexus_decision.runtime_mlx import MLXBackend
 
 res = {}
 res["mlx_adapter"] = logits(NexusDecision(MLXBackend("Qwen/Qwen3.5-4B", adapter_path=adapters)))
 gc.collect()
 res["mlx_fused"] = logits(NexusDecision(MLXBackend(fused)))
 gc.collect()
-import mlx.core as mx  # noqa: E402
+import mlx.core as mx
 
 mx.clear_cache()
-from nexus_decision.runtime_hf import HFBackend  # noqa: E402
+from nexus_decision.runtime_hf import HFBackend
 
 hf = HFBackend(fused, device="cpu", dtype="float32")
 print("hf class:", type(hf.model).__name__)

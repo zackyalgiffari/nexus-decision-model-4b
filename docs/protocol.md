@@ -55,7 +55,7 @@ Each question gets one `Answer`:
   "expected_score": null,
   "p_yes": null,
   "reasoning": null,
-  "model_id": "<user>/nexus-decision-4b"
+  "model_id": "zackyalgiffari/nexus-decision-4b"
 }
 ```
 

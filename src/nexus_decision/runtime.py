@@ -54,7 +54,7 @@ def letter_token_ids(tokenizer: Any, n: int = len(LETTERS)) -> list[int]:
 class NexusDecision:
     """High-level API.
 
-    >>> nd = NexusDecision.from_pretrained("<user>/nexus-decision-4b", backend="mlx")
+    >>> nd = NexusDecision.from_pretrained("zackyalgiffari/nexus-decision-4b", backend="mlx")
     >>> nd.decide({"state": {...}, "questions": {"route": {"type": "choice", ...}}})
     """
 

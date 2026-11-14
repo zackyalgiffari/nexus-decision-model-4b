@@ -71,7 +71,7 @@ def validate(scn: dict) -> dict | None:
             if isinstance(q, dict) and q.get("type") == "score" and isinstance(q.get("rubric"), dict):
                 q = {**q, "rubric": {int(k): v for k, v in q["rubric"].items()}}
             parsed = parse_question(q)
-        except Exception:
+        except Exception:  # noqa: BLE001, S112 -- teacher output is untrusted; skip any malformed question
             continue
         if parsed.type == "choice" and len(parsed.options) > MAX_OPTIONS:
             continue

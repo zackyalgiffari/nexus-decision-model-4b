@@ -232,7 +232,7 @@ def run_concurrent(
                 print(f"\n[budget] {e} -- stopping", flush=True)
             stop.set()
             return i, None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 -- one failed item must not stop the batch
             print(f"\n[error] item {i}: {type(e).__name__}: {e}", flush=True)
             return i, None
 

@@ -3,7 +3,7 @@ import pytest
 mx = pytest.importorskip("mlx.core")
 gd = pytest.importorskip("mlx_lm.models.gated_delta")
 
-from train.mlx_patches import gated_delta_chunked  # noqa: E402
+from train.mlx_patches import gated_delta_chunked
 
 
 def _inputs(T=150, B=1, Hk=4, Hv=8, D=32, seed=0):
