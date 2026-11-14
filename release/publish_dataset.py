@@ -3,7 +3,7 @@
 Private by default; pass --public after review.
 
 Usage:
-    uv run python -m release.publish_dataset --user <hf-username> [--public] [--dry-run]
+    uv run python -m release.publish_dataset --user <hf-username> [--public] [--dry-run | --card-only]
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ import argparse
 import json
 import shutil
 from pathlib import Path
+
+from release.card import COLLECTION
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "artifacts" / "data"
@@ -25,13 +27,24 @@ task_categories: [text-classification]
 tags: [decision-making, routing, triage, calibration, distillation, synthetic]
 size_categories: [10K<n<100K]
 configs:
-  - config_name: train
-    data_files: train.jsonl
-  - config_name: test
-    data_files: test.jsonl
+  - config_name: training
+    data_files:
+      - split: train
+        path: train.jsonl
+      - split: validation
+        path: val.jsonl
+  - config_name: evaluation
+    data_files:
+      - split: calibration
+        path: calib.jsonl
+      - split: test
+        path: test.jsonl
 ---
 
 # nexus-decision-data
+
+[Model](https://huggingface.co/{user}/nexus-decision-4b) · [All variants]({collection}) ·
+[Code on GitHub](https://github.com/{github})
 
 This is the training and evaluation data for
 [{user}/nexus-decision-4b](https://huggingface.co/{user}/nexus-decision-4b), an open-weight
@@ -62,6 +75,22 @@ application state, with soft labels from a teacher model.
 
 The test split of the public data is the original datasets' test split. It was never used for
 training.
+
+The two viewer configs are `training` (train, validation: rendered prompts and soft-label
+targets) and `evaluation` (calibration, test: the questions the evaluation runs on). The other
+files are raw pipeline outputs; load them with `hf_hub_download` and read them as JSON lines.
+The code that builds every file is in [the GitHub repo](https://github.com/{github}).
+
+## Citation
+
+```bibtex
+@misc{{nexus-decision-4b,
+  title  = {{nexus-decision-4b: a calibrated typed decision model distilled from DeepSeek-V4.1-Flash}},
+  author = {{{user}}},
+  year   = {{2026}},
+  url    = {{https://huggingface.co/{user}/nexus-decision-4b}}
+}}
+```
 """
 
 
@@ -70,7 +99,10 @@ def main() -> None:
     ap.add_argument("--user", required=True)
     ap.add_argument("--name", default="nexus-decision-data")
     ap.add_argument("--public", action="store_true")
-    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--github", default="zackyalgiffari/nexus-decision-model-4b")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--card-only", action="store_true", help="upload README.md to the existing repo")
     args = ap.parse_args()
 
     out = ROOT / "artifacts" / "release" / args.name
@@ -80,7 +112,9 @@ def main() -> None:
             shutil.copyfile(DATA / f, out / f)
     stats = json.loads((DATA / "stats.json").read_text())
     table = "| Statistic | Value |\n|---|---|\n" + "\n".join(f"| {k} | {v:,} |" for k, v in stats.items())
-    (out / "README.md").write_text(CARD.format(user=args.user, stats=table))
+    (out / "README.md").write_text(CARD.format(
+        user=args.user, stats=table, github=args.github,
+        collection=f"https://huggingface.co/collections/{args.user}/{COLLECTION}"))
     print(f"prepared {out}")
     if args.dry_run:
         return
@@ -88,6 +122,11 @@ def main() -> None:
 
     api = HfApi()
     repo = f"{args.user}/{args.name}"
+    if args.card_only:
+        api.upload_file(path_or_fileobj=str(out / "README.md"), path_in_repo="README.md", repo_id=repo,
+                        repo_type="dataset", commit_message="Update dataset card")
+        print(f"card updated: https://huggingface.co/datasets/{repo}")
+        return
     api.create_repo(repo, repo_type="dataset", private=not args.public, exist_ok=True)
     api.upload_folder(repo_id=repo, repo_type="dataset", folder_path=str(out),
                       commit_message="Upload nexus-decision-data")

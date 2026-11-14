@@ -1,5 +1,9 @@
 # {{ repo_name }}
 
+[Code on GitHub](https://github.com/{{ gh_repo }}) · [All variants]({{ collection_url }}) ·
+[Dataset](https://huggingface.co/datasets/{{ hf_user }}/nexus-decision-data) ·
+[Evaluation](#evaluation) · [Prompt protocol](https://github.com/{{ gh_repo }}/blob/main/docs/protocol.md)
+
 {% if mlx_bits %}
 > **MLX {{ mlx_bits }}-bit** quantisation of
 > [{{ hf_user }}/nexus-decision-4b](https://huggingface.co/{{ hf_user }}/nexus-decision-4b) for Apple silicon.
@@ -42,6 +46,17 @@ with LoRA. The training targets were the teacher's soft labels plus its reasonin
 | Calibration | One temperature per mode in `nexus_config.json` (fast {{ "%.3f"|format(temps.fast) }}, think {{ "%.3f"|format(temps.think) }}) |
 | Languages | Trained mostly on English. Indonesian, Spanish, German, French, Portuguese and Japanese are covered in smaller amounts. |
 | License | Apache-2.0 |
+
+## Model family
+
+| Repo | Format | Use it for |
+|---|---|---|
+| [nexus-decision-4b](https://huggingface.co/{{ hf_user }}/nexus-decision-4b) | Transformers, bf16 | CUDA, CPU, MPS; the reference weights |
+| [nexus-decision-4b-MLX-8bit](https://huggingface.co/{{ hf_user }}/nexus-decision-4b-MLX-8bit) | MLX, 8-bit | Apple silicon |
+| [nexus-decision-4b-MLX-4bit](https://huggingface.co/{{ hf_user }}/nexus-decision-4b-MLX-4bit) | MLX, 4-bit | Apple silicon with less memory |
+| [nexus-decision-data](https://huggingface.co/datasets/{{ hf_user }}/nexus-decision-data) | JSONL | Training and evaluation data (CC-BY-4.0) |
+
+Every model repo includes `nexus_config.json` with the calibration temperatures.
 
 > nexus-decision-4b follows the "System One decision model" interface popularised by TypeSafe AI's
 > Jev. It is an independent project. It is not affiliated with TypeSafe AI and contains none of

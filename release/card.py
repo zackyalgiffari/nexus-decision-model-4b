@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EVAL = ROOT / "artifacts" / "eval"
 DATA = ROOT / "artifacts" / "data"
 TEMPLATE = ROOT / "release" / "model_card.md.j2"
+COLLECTION = "nexus-decision-4b-6af7fc5003be12bf9aa5b4c9"  # slug of the HF collection, after the user name
 
 MODELS = [("tuned", "**nexus-decision-4b**"), ("base", "Qwen3.5-4B (base, same prompt)"),
           ("teacher", "DeepSeek-V4.1-Flash (teacher)")]
@@ -133,6 +134,7 @@ def context(user: str, github: str, hardware: str, train_info: dict | None) -> d
     thr = {r["threshold"]: r for r in an["thresholds"]["all"]}
     return {
         "hf_user": user, "gh_repo": github, "hardware": hardware,
+        "collection_url": f"https://huggingface.co/collections/{user}/{COLLECTION}",
         "results": results, "an": an, "stats": stats, "ci": ci,
         "tuned": tuned, "base": base, "teacher": teacher, "temps": an["temperatures"]["tuned"],
         "thr": thr, "weak_domains": weak, "think": an.get("think_vs_fast"), "lat": an["latency"],
